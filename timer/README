@@ -1,0 +1,17 @@
+# Timer
+1.Description of all files in this directory
+
+a. driver.c - This file makes a tcp connection to timer.c and gives instruction to timer.c.
+Instructions are of the format : 
+startTimer(timevalue,#sequencenumber)
+b. timer.c - This file maintains a list of time nodes which represents the time value for each sequence number.
+
+2. Compilation: Go to timer directory within the project home directory.Use below script,
+make
+
+3. Running : Open two terminals, one for driver and the other for timer.
+--> timer terminal:
+./timer <port-number>
+
+--> driver terminal:
+./driver <ip-number-of-timer> <timer-process-port-number>
