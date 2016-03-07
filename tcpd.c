@@ -13,15 +13,26 @@
 #include <stdlib.h>
 #include "lib.h"
 #include "crc.h"
+#include "bufferManager.h"
+#define MAX_BUF_SIZE 64000
+char sendBuffer[MAX_BUF_SIZE], recvBuffer[MAX_BUF_SIZE];
+int sendStartBuffer, sendEndBuffer;
+int sendStartWindow, sendEndWindow;
 
-#define MAX_BUF_SIZE 10000
+int recvStartBuffer, recvEndBuffer;
+int recvStartWindow, recvEndWindow;
+int previousPacketProcessed = 0;
+
+//buffer management functions
+
+
 
 main(int argc, char const *argv[])
 {
 	int crc;
 	char oneByte;									//Packet format accepted by troll
 	Packet packet;
-	char buffer[MAX_BUF_SIZE];
+	
 	int sock, troll_sock, server_sock;                               //Initial socket descriptors
 	struct sockaddr_in troll, my_addr;
 	int dummy;
@@ -86,28 +97,27 @@ main(int argc, char const *argv[])
 
 	//Always keep on listening and sending
 	while(1) {
-		int rec = recvfrom(sock, &packet, sizeof(packet), 0, (struct sockaddr *)&my_addr, &len);
-		if(rec<0){
-			perror("Error receiving datagram");
-			exit(1);
+		if(previousPacketProcessed == 1){
+			previousPacketProcessed = 0;
+			int rec = recvfrom(sock, &packet, sizeof(packet), 0, (struct sockaddr *)&my_addr, &len);
+			if(rec<0){
+				perror("Error receiving datagram");
+				exit(1);
+			}
 		}
 		switch((int)packet.packetType){
 			case 1:
 				//ftpc send us a message
-				
-				rec -= ( sizeof(packet.packetType) + sizeof(packet.header) + sizeof(packet.tcpHeader));
 				printf("Received packet no--> %d\n",count);
 				
 				//forwarding the message to troll
-				packet.packetType = (char)3;
-				crc = gen_crc(packet.body, MSS);
-				packet.tcpHeader.checksum = crc;
-				s = sendto(troll_sock, &packet, sizeof(packet), 0, (struct sockaddr *)&troll, sizeof(troll));
-				if (s < 0)
-				{
-				    perror("Error sending datagram");
-				    exit(1);
+				
+				if(!isSendBufferFull()){
+					addToSendBuffer(packet.body, MSS);
+					previousPacketProcessed = 1;
 				}
+				//send to troll part
+				
  				count++;
 				break;
 			case 2:
@@ -120,6 +130,7 @@ main(int argc, char const *argv[])
 				printf("New server connected at port: %s\n", port);
 
 				printf("Sending all packets to the server...\n");
+				previousPacketProcessed = 1;
 
 				//Counter to count number of datagrams forwarded
 				break;
@@ -134,19 +145,54 @@ main(int argc, char const *argv[])
 				
 				//check crc
 				if(test_crc(packet.body, MSS, packet.tcpHeader.checksum)){
-					printf("Received and sent --> %d\n",count-1);
+					printf("packet (%d) verification --> Successful\n",count-1);
 				}
 				else{
-					printf("Received and sent --> %d (garbled)\n",count-1);
+					printf("packet (%d) verification --> Unsuccessful \n",count-1);
+					previousPacketProcessed = 1;
 				}
-				s = sendto(server_sock, &packet, sizeof(packet), 0, (struct sockaddr *)&server_addr, sizeof(server_addr));
-				count++;
-
+				
+				addToRecvBuffer(packet.tcpHeader.seq, packet.body, MSS);
+				previousPacketProcessed = 1;
+				//send ack to tcpdc
+				//send the same packet back
+				s = sendto(troll_sock, &packet, sizeof(packet), 0, (struct sockaddr *)&troll, sizeof(troll));
 		        if (s < 0)
 		        {
 		            perror("Error sending datagram");
 		            exit(1);
 		        } 
+				
+				case 4:
+				//received ack from troll 
+				//this functio call will adjust the window, and close timers
+				acceptAck(packet.tcpHeader.seq);
+				printf("acccepted ack -> %d\n",packet.tcpHeader.seq);
+			}
+
+			//send to ftps
+			if(!isDataToSendFtpsEmpty()){
+				getDataToSendFtps(&packet);
+				s = sendto(server_sock, &packet, sizeof(packet), 0, (struct sockaddr *)&server_addr, sizeof(server_addr));
+				if (s < 0)
+		        {
+		            perror("Error sending datagram");
+		            exit(1);
+		        } 
+			}
+			//send to troll after receiving from ftpc
+			//place to start timer for packet
+			if(!isDataToSendTrollEmpty()){ // this function
+				getDataToSendTroll(&packet);
+				packet.packetType = (char)3;
+				crc = gen_crc(packet.body, MSS);
+				packet.tcpHeader.checksum = crc;
+				s = sendto(troll_sock, &packet, sizeof(packet), 0, (struct sockaddr *)&troll, sizeof(troll));
+				if (s < 0)
+				{
+				    perror("Error sending datagram");
+				    exit(1);
+				}
 			}
         //Incrementing counter
        

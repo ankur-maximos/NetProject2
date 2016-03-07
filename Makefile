@@ -4,7 +4,7 @@ CC = gcc
 OBJCLI = client.c 
 OBJSRV = server.c
 OBJTCPD = tcpd.c
-CFLAGS = 
+CFLAGS = -g
 # setup for system
 LIBS = 
 
