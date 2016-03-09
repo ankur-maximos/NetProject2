@@ -7,6 +7,7 @@ int main(int argc, char **argv){
 	int opn, elem;
 	char str[20];
 	int seq = 0;
+	Packet packet;
 	char body[50] = "12345678901234567890123456789012345678901234567890";
 	do
 	{
@@ -17,17 +18,21 @@ int main(int argc, char **argv){
 		scanf("%d", &opn);
 		switch (opn)
 		{
-		case 1: 
-			seq = addToSendBuffer(body, MSS);
-			setPacketToSentToTroll(seq);
+		case 1:
+			scanf("%d", &seq);
+			addToRecvBuffer(seq, body, MSS);
+			
 			break;
 		case 2: 
-			scanf("%d", &seq);
-			acceptAck(seq);
-			printf("acccepted ack -> %d\n",seq);
+			
+			if(!isDataToSendFtpsEmpty()){
+				getDataToSendFtps(&packet);
+				printf("acccepted packet no -> %d\n",packet.tcpHeader.seq);
+			}
+			
 		case 3: 
 			printf("\n\nStatus of Circular Queue\n\n");
-			displaySendBuffer(); 
+			displayRecvBuffer(); 
 			break;
 		case 4: 
 			printf("\n\n Terminating \n\n"); 

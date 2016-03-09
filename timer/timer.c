@@ -6,6 +6,7 @@
 #include <netdb.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include "../lib.h"
 
 // Timer node structure
 struct node {
@@ -269,6 +270,14 @@ int main(int argc,const char *argv[]) {
   			} 
   		}
   		while(head && head->time_val == 0.0) {
+  			Packet packet;
+  			packet.packetType = 5;
+  			tcp tcpHeader;
+		    packet.header = timer_add;
+		    packet.tcpHeader = tcpHeader; // empty tcpHeader
+		    packet.tcpHeader.seq = head->key;
+		    printf("sending packet\n");
+  			send(msgsock, &packet, sizeof(packet), 0);
         	deleteNode(&head,head->key);
         }
         if(head) {

@@ -68,7 +68,6 @@ void set_packetType(int type){
 }
 /* 
    Send function to send data to tcpd (client for lab3)
-   not tested
 */
 int SEND(int sock, const void *buf, size_t len, int flags){
 	struct sockaddr_in tcpd;

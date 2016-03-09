@@ -99,7 +99,7 @@ main(int argc, char const *argv[])
     if(size<1000){
         sent_size = size;
     }
-
+    usleep(1000000);
     //Continue sending until all the datagrams are sent to TCPD
     while(sent<size){
 
@@ -127,7 +127,7 @@ main(int argc, char const *argv[])
         bzero(buf,1000);
 
         //Sleep for 10ms
-        usleep(10000);
+        usleep(100000);
     }
 
     //Close the file pointer
