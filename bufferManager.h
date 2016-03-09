@@ -28,6 +28,10 @@ int seqToTroll;
 int recvBook[SIZE];
 int recvBookF = 0;
 int recvBookR = BOOK_MAX_WIN_SIZE;
+int sendBook[SIZE];
+int sendBookF = 0;
+int sendBookR = 0;
+int sendTimeOutBuffer[SIZE];
 
 
 void print(char* body){
@@ -70,11 +74,13 @@ int addToSendBuffer(char* body, int size){
 	if (isSendBufferFull()) printf("\n\n Overflow!!!!\n\n");
 	else{
 		if (sendWinF == -1)sendWinF = 0;
+		int index = sendWinR;
 		while (i < size){
 			SendBuffer[sendWinR] = *(body+i);
 			sendWinR = (sendWinR + 1) % SIZE;
 			i++;
 		}
+		sendBook[index/MSS] = 1;
 		sendSeqR += size;
 		return seq;
 	}
@@ -149,11 +155,11 @@ void addToRecvBuffer(int seq, char* body, int size){ // untested. perform a chec
 void updateSendBuffer(){
 	int count = 0;
 	int index = 0;
-	if(SendBuffer[sendWinF] == '\0'){
+	if(sendWinF%MSS == 0 && sendBook[sendWinF/MSS] == 0){
 		index = sendWinF;
-		while(SendBuffer[index] == '\0' && index != sendWinR){
-			index = (index + 1) % SIZE;
-			count++;
+		while(sendBook[index/MSS] == 0 && index != sendWinR){
+			index = (index + MSS) % SIZE;
+			count+=MSS;
 		}
 		if(count % MSS == 0){
 			sendWinF = (sendWinF + count) % SIZE;
@@ -181,13 +187,17 @@ void acceptAck(int seq){
 	else{
 		cancelTimer(seq);
 		int index = (seq)%SIZE;
-		if (sendWinF == -1)sendWinF = 0;
-		while (i < MSS){
-			SendBuffer[index] = '\0';
-			index = (index + 1) % SIZE;
-			i++;
+		if(index%MSS == 0){
+			sendBook[index/MSS] = 0;
+			if (sendWinF == -1)sendWinF = 0;
+			while (i < MSS){
+				SendBuffer[index] = '\0';
+				index = (index + 1) % SIZE;
+				i++;
+			}
+			updateSendBuffer();
 		}
-		updateSendBuffer();
+		
 	}
 }
 
@@ -218,23 +228,22 @@ int recvBufferPop(char* body, int size){
 		displayRecvBuffer();
 		return FAILED;
 	}
-	else
-	{
-		int i = 0;
-		int index = recvWinF;
-		while (i < size){
-			*(body+i) = RecvBuffer[recvWinF];
-			if (recvWinF == recvWinR){ 
-				status = PARTIAL;
-				fprintf(stderr, "%s\n", "error");
-				return status;
-			} /* Q has only one element ? */
-			else{
-				RecvBuffer[recvWinF] = '\0';
-				recvWinF = (recvWinF + 1) % SIZE;
-				i++;
+	else if(recvBook[recvWinF/MSS] == 1){
+			int i = 0;
+			int index = recvWinF;
+			while (i < size){
+				*(body+i) = RecvBuffer[recvWinF];
+				if (recvWinF == recvWinR){ 
+					status = PARTIAL;
+					fprintf(stderr, "%s\n", "error");
+					return status;
+				} /* Q has only one element ? */
+				else{
+					RecvBuffer[recvWinF] = '\0';
+					recvWinF = (recvWinF + 1) % SIZE;
+					i++;
+				}
 			}
-		}
 		recvBook[index/MSS] = 0;
 		status = FULL;
 		return status;
@@ -293,6 +302,24 @@ int isDataToSendFtpsEmpty(){
 	return 1;
 }
 
+void displayBook1(){
+	int i;
+	for (i = 0; i < BOOK_SIZE; ++i)
+	{
+		printf("%d ", recvBook[i]);
+	}
+	printf("\n");
+}
+
+void displayBook2(){
+	int i;
+	for (i = 0; i < BOOK_SIZE; ++i)
+	{
+		printf("%d ", sendBook[i]);
+	}
+	printf("\n");
+}
+
 void displaySendBuffer(){
 	int count = 0;
 	printf("Front[%d]->", sendWinF);
@@ -309,7 +336,12 @@ void displaySendBuffer(){
 
 //functions with time management control
 int isDataToSendTrollEmpty(){
-	return isSendBufferEmpty();
+	int i = 0;
+	for(i = 0; i<BOOK_SIZE; i++){
+		if(sendTimeOutBuffer[i]!=-1)
+			return 0;
+	}
+	return 1;
 }
 
 int getDataToSendFtps(Packet* packet){
@@ -325,27 +357,33 @@ int getDataToSendFtps(Packet* packet){
 
 setPacketToSentToTroll(int seq){
 	printf("set Packet To Send To Troll called %d\n", seq);
-	sendBufferGetData(bodyToTroll, MSS, seq);
+	if(sendBufferGetData(bodyToTroll, MSS, seq) == FULL){
+		sizeToTroll = MSS;
+		seqToTroll = seq;
+		firstTimeSent = 1;
+	}
 	
-	sizeToTroll = MSS;
-	seqToTroll = seq;
-	firstTimeSent = 1;
+	
 }
 //gets data from current timer list stack (schedules any pending packets based on expired time)
 int getDataToSendTroll(Packet* packet){
-	if(firstTimeSent == 1){
-
-		memcpy(packet->body, bodyToTroll, MSS);
-		packet->tcpHeader.seq = seqToTroll;
-		packet->packetType = 3;
-		firstTimeSent = 0;
-		return 1;
-		//start timer here
+	int i = 0;
+	for(i = 0; i<BOOK_SIZE; i++){
+		printf("%d\n", sendTimeOutBuffer[i]);
+		if(sendTimeOutBuffer[i] !=-1){
+			printf("inside getdatatosendtroll\n");
+			sendBufferGetData(packet->body, MSS, i*MSS);
+			packet->tcpHeader.seq = sendTimeOutBuffer[i];
+			sendTimeOutBuffer[i] = -1;
+			packet->packetType = 3;
+			firstTimeSent = 0;
+			return 1;
+		}
 	}
-	else{
-		//get any pending packets from timer list and start them here
 
-	}
+	
+	//start timer here
+	
 	return 0;
 }
 void printRecvBufferParameters(){

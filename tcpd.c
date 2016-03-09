@@ -40,7 +40,7 @@ main(int argc, char const *argv[])
 	struct sockaddr_in troll, my_addr;
 	int dummy;
 	struct sockaddr_in server_addr;					//Structures for server and tcpd socket name setup
-	struct sockaddr_in server_address;
+	struct sockaddr_in tcpds_address, tcpdc_address;
 	int i, s;
 	int rec;
 	char port[4];
@@ -96,8 +96,11 @@ main(int argc, char const *argv[])
 
 	//Counter to count number of datagrams forwarded
 	int count = 0;
-
-
+	
+	for(i = 0; i<BOOK_SIZE; i++){
+		sendTimeOutBuffer[i] = -1;
+	}
+	i = 0;
 
 	//Always keep on listening and sending
 	while(1) {
@@ -115,7 +118,7 @@ main(int argc, char const *argv[])
 			case 1:
 				//ftpc send us a message 
 				if(firstTimeEver){
-					server_address = packet.header;
+					tcpds_address = packet.header;
 					firstTimeEver = 0;
 					init(); // initialize tcp socket to timer 
 				}
@@ -123,10 +126,18 @@ main(int argc, char const *argv[])
 				if(!isSendBufferFull()){
 					int seq;
 					seq = addToSendBuffer(packet.body, MSS);
-					setPacketToSentToTroll(seq);
+					//setPacketToSentToTroll(seq);
+					sendTimeOutBuffer[(seq/MSS)%BOOK_SIZE] = seq;
 					justSettingDataToTroll = 1;
 					previousPacketProcessed = 1;
 					printf("Received from ftpc, packet no--> %d\n",seq);
+					//now that data is in buffer send message back to client
+					s = sendto(sock, &packet, sizeof(packet), 0, (struct sockaddr *)&my_addr, sizeof(my_addr));
+				        if (s < 0)
+				        {
+				            perror("Error sending datagram");
+				            exit(1);
+				        } 
 				
 				}
 				//send to troll part
@@ -138,11 +149,19 @@ main(int argc, char const *argv[])
 				memcpy(port,packet.body,1000);
 
 				//Setting port number in struct
+				server_addr.sin_family = AF_INET;
+				server_addr.sin_addr.s_addr = inet_addr("127.0.0.1");	
 				server_addr.sin_port = htons(atoi(port));
 				printf("New server connected at port: %s\n", port);
 
 				printf("Waiting...\n");
 				previousPacketProcessed = 1;
+				s = sendto(sock, &packet, sizeof(packet), 0, (struct sockaddr *)&server_addr, sizeof(server_addr));
+		        if (s < 0)
+		        {
+		            perror("Error sending datagram");
+		            exit(1);
+		        } 
 
 				//Counter to count number of datagrams forwarded
 				break;
@@ -151,69 +170,80 @@ main(int argc, char const *argv[])
 				//receiving from troll to send to ftps
 				//Receiving from troll
 
-				////Sending to ftps
-				server_addr.sin_family = htons(AF_INET);
-			    server_addr.sin_port = htons(atoi(argv[3]));
-			    server_addr.sin_addr.s_addr = inet_addr(argv[4]);
-			    packet.header = server_addr;
+				
 				
 				//check crc
 				if(test_crc(packet.body, MSS, packet.tcpHeader.checksum)){
 					printf("packet (%d) verification --> Successful\n",packet.tcpHeader.seq);
+					if(!isRecvBufferFull()){
+						printf("packet added to buffer\n");
+						addToRecvBuffer(packet.tcpHeader.seq, packet.body, MSS);
+						printRecvBufferParameters();
+
+						//send ack to tcpdc
+						//send the same packet back as ack
+						printf("creating and sending ack packet\n");
+						packet.packetType = (char)4;
+						troll.sin_family = AF_INET;
+						printf("port no: %d\n", atoi(argv[2]));
+					  	troll.sin_port = htons(atoi(argv[2]));
+					  	troll.sin_addr.s_addr = inet_addr("127.0.0.1");
+					  	packet.tcpHeader.ack = 1;
+					  	tcpdc_address.sin_family = htons(AF_INET);
+					    tcpdc_address.sin_port = htons(atoi(argv[3]));
+					    tcpdc_address.sin_addr.s_addr = inet_addr(argv[4]);
+					    packet.header = tcpdc_address;
+						s = sendto(troll_sock, &packet, sizeof(packet), 0, (struct sockaddr *)&troll, sizeof(troll));
+				        if (s < 0)
+				        {
+				            perror("Error sending datagram");
+				            exit(1);
+				        } 
+				        packet.packetType = 8; // so it doesnt come back
+						
+						previousPacketProcessed = 1;
+					}
 				}
 				else{
 					printf("packet (%d) verification --> Unsuccessful \n",packet.tcpHeader.seq);
 					previousPacketProcessed = 1;
 				}
-				if(!isRecvBufferFull()){
-					printf("packet added to buffer\n");
-					addToRecvBuffer(packet.tcpHeader.seq, packet.body, MSS);
-					printRecvBufferParameters();
-					
-					previousPacketProcessed = 1;
-				}
 				
-				//send ack to tcpdc
-				//send the same packet back as ack
-				packet.packetType = (char)4;
-				troll.sin_family = AF_INET;
-			  	troll.sin_port = htons(atoi(argv[2]));
-			  	troll.sin_addr.s_addr = inet_addr("127.0.0.1");
-				s = sendto(troll_sock, &packet, sizeof(packet), 0, (struct sockaddr *)&troll, sizeof(troll));
-		        if (s < 0)
-		        {
-		            perror("Error sending datagram");
-		            exit(1);
-		        } 
-		        packet.packetType = 8; // so it doesnt come back
 		        break;
+
 			case 4:
 				//received ack from troll 
 				//this functio call will adjust the window, and close timers
-				acceptAck(packet.tcpHeader.seq);
-				printf("acccepted ack -> %d\n",packet.tcpHeader.seq);
-				previousPacketProcessed = 1;
+				if(packet.tcpHeader.ack == 1){
+					acceptAck(packet.tcpHeader.seq);
+					printf("acccepted ack -> %d\n",packet.tcpHeader.seq);
+					previousPacketProcessed = 1;
+				}
 				break;
 			}
 
-			
+			printf("exit switch case\n");
 			//poll timer to find out timed out blocks
-			if(justSettingDataToTroll == 0){
-				int seq = recvTimeout();
-				if(seq!=-1){
-					//got message from timer saying that seq no timedout
-					printf("asdfasdfasdfasdfasdfasdf\n");
-					setPacketToSentToTroll(seq);
-				}
+			
+			int seq = recvTimeout();
+			while(seq!=-1){
+				//got message from timer saying that seq no timedout
+				printf("asdfasdfasdfasdfasdfasdf\n");
+				//setPacketToSentToTroll(seq);
+				sendTimeOutBuffer[(seq/MSS)% BOOK_SIZE] = seq;
+				seq = recvTimeout();
 			}
+			
 			//send to ftps
 			if(!isDataToSendFtpsEmpty()){
+
 				server_addr.sin_family = AF_INET;
 				server_addr.sin_addr.s_addr = inet_addr("127.0.0.1");	
 				server_addr.sin_port = htons(atoi(port));
 				if(getDataToSendFtps(&packet)){
 					packet.packetType = (char)5;
-					printf("sending packet to FTPS\n");
+					packet.tcpHeader.ack = 0;
+					printf("sending packet to FTPS %d\n", atoi(port));
 					s = sendto(server_sock, &packet, sizeof(packet), 0, (struct sockaddr *)&server_addr, sizeof(server_addr));
 					if (s < 0)
 			        {
@@ -224,17 +254,23 @@ main(int argc, char const *argv[])
 			}
 			//send to troll after receiving from ftpc
 			//place to start timer for packet
-			if(!isDataToSendTrollEmpty()){ // this function
+			displayBook1();
+			displayBook2();
+			while(!isDataToSendTrollEmpty()){ // this function
+				
 				printf("entering send to server\n");
 				if(getDataToSendTroll(&packet)){
-					justSettingDataToTroll = 0;
+					
 					
 					crc = gen_crc(packet.body, MSS);
 					packet.tcpHeader.checksum = crc;
-				    packet.header = server_address;
+				    packet.header = tcpds_address;
 					printf("sending data seq = %d\n", packet.tcpHeader.seq);
 					startTimer(TIMER, packet.tcpHeader.seq);
 					packet.packetType = (char)3;
+					troll.sin_family = AF_INET;
+				  	troll.sin_port = htons(atoi(argv[2]));
+				  	troll.sin_addr.s_addr = inet_addr("127.0.0.1");
 					s = sendto(troll_sock, &packet, sizeof(packet), 0, (struct sockaddr *)&troll, sizeof(troll));
 					if (s < 0)
 					{

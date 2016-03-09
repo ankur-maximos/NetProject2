@@ -91,6 +91,11 @@ int SEND(int sock, const void *buf, size_t len, int flags){
         perror("Error sending datagram message");
         exit(1);
     }
+  int fromlen = sizeof(tcpd);
+  if(recvfrom(sock, &toTcpd, sizeof(toTcpd), MSG_WAITALL, (struct sockaddr *)&tcpd, &fromlen) < 0) {
+      perror("Error sending datagram message");
+      exit(1);
+  }
 }
 
 /* 

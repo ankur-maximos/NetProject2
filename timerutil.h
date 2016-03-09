@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include "lib.h"
 
+
 #define INITIAL_RT0 200
 #define PORT 3090
 float SRTT, RTTVAR;                                                             //Smoothed RTT and RTT variance
@@ -20,7 +21,7 @@ int timer_port = PORT;
 int sock;
 struct sockaddr_in timer_add;
 struct hostent *hp;
-fd_set readSockets;
+fd_set readSockets, writeSockets;
 struct timeval tv;
 
 struct node {
@@ -37,8 +38,7 @@ void init(){
         perror("error opening tcp socket");
         exit(1);
     }
-    FD_ZERO(&readSockets);
-    FD_SET(sock,&readSockets);
+    
     hp = gethostbyname("localhost");
     if(hp == 0) {
         fprintf(stderr, "localhost: unknown host\n");
@@ -59,6 +59,11 @@ void init(){
         perror("error connecting stream socket");
         exit(1);
     }
+    FD_ZERO(&readSockets);
+    FD_ZERO(&writeSockets);
+    FD_SET(sock,&readSockets);
+    FD_SET(sock, &writeSockets);
+    int temp = select(sock+1,&readSockets,&writeSockets,NULL,&tv);
 
     char msg[30] = "Sending timer informations...";
 
@@ -80,6 +85,7 @@ void startTimer(double timeval, int key) {
         perror("error writing on stream socket: error on sending packet");
         exit(1);
     }
+    usleep(100000);
 }
 
 void cancelTimer(int key) {
@@ -92,16 +98,21 @@ void cancelTimer(int key) {
         perror("error writing on stream socket: error on sending packet");
         exit(1);
     }
+    usleep(100000);
 } 
 
 int recvTimeout(){
     if(isActive){
-        FD_ZERO(&readSockets);
-        FD_SET(sock,&readSockets);
-        int temp = select(sock+1,&readSockets,NULL,NULL,&tv);
-        if(temp){
-            Packet packet;
-            int rec = recv(sock, &packet, sizeof(packet), 0);
+        int temp = select(sock+1,&readSockets,&writeSockets,NULL,&tv);
+        printf("temp = %d\n", temp);
+        if(temp > 0) {
+            
+            printf("ITS READING!!!!\n");
+           Node *packet  = (Node*)malloc(sizeof(Node));
+            packet->key = 0;
+            packet->timeval = 0.0;
+            packet->next = NULL;
+            int rec = recv(sock, packet, sizeof(Node), 0);
             if( rec < 0){
                 perror("error reading on stream socket: error on reading file size");
                 exit(1);
@@ -109,7 +120,7 @@ int recvTimeout(){
             if(rec == 0){
                 return -1;
             }
-            return packet.tcpHeader.seq;
+            return packet->key;
         }
     }
     return -1;

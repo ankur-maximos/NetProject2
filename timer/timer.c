@@ -160,7 +160,9 @@ int main(int argc,const char *argv[]) {
 	struct timeval t2;
 	double elapsedTime;
 	fd_set readSockets;
+	fd_set writeSockets;
 	FD_ZERO(&readSockets);
+	FD_ZERO(&writeSockets);
 
 	char *msg;
 
@@ -214,9 +216,11 @@ int main(int argc,const char *argv[]) {
   		printList(&head);
   		/* computing time taken to complete select function */
   		FD_ZERO(&readSockets);
+  		FD_ZERO(&writeSockets);
   		FD_SET(msgsock,&readSockets);
+  		FD_SET(msgsock, &writeSockets);
   		gettimeofday(&t1,NULL);
-  		int temp = select(msgsock+1,&readSockets,NULL,NULL,tv);
+  		int temp = select(msgsock+1,&readSockets,&writeSockets,NULL,tv);
   		gettimeofday(&t2,NULL);
   		if(temp == -1) {
   			perror("select");
@@ -270,14 +274,13 @@ int main(int argc,const char *argv[]) {
   			} 
   		}
   		while(head && head->time_val == 0.0) {
-  			Packet packet;
-  			packet.packetType = 5;
-  			tcp tcpHeader;
-		    packet.header = timer_add;
-		    packet.tcpHeader = tcpHeader; // empty tcpHeader
-		    packet.tcpHeader.seq = head->key;
+  			Node* newN = (Node*)malloc(sizeof(Node));
+  			newN->key = head->key;
+			newN->time_val = 0.0;
+			newN->next = NULL;
 		    printf("sending packet\n");
-  			send(msgsock, &packet, sizeof(packet), 0);
+  			int w = write(msgsock, newN, sizeof(Node));
+  			printf("%d\n", w);
         	deleteNode(&head,head->key);
         }
         if(head) {
