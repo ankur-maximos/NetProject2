@@ -51,18 +51,23 @@ void print(char* body){
 
 //check if send buffer is full or not. The send buffer is indicated as full if the send window is full.
 int isSendBufferFull(){
-	if ((sendWinF == sendWinR + 1) || (sendWinF == 0 && sendWinR == SIZE - 1) || ((sendWinF + MAX_WIN_SIZE) < sendWinR)) 
+	if ((sendWinF == sendWinR + 1) || (sendWinF == 0 && sendWinR == SIZE - 1) || ((sendWinF + MAX_WIN_SIZE) < sendWinR) || ((sendSeqF + MAX_WIN_SIZE) < sendSeqR)) 
 		return 1;
 	return 0;
 }
 
 //check if recv buffer is full or not. the recv buffer is indicated as full if the recv window if full.
 int isRecvBufferFull(){
-	if ((recvWinF == recvWinR + 1) || (recvWinF == 0 && recvWinR == SIZE - 1) || ((recvWinF + MAX_WIN_SIZE) < recvWinR)) 
+	if ((recvWinF == recvWinR + 1) || (recvWinF == 0 && recvWinR == SIZE - 1) || ((recvWinF + MAX_WIN_SIZE) < recvWinR) || ((recvSeqF + MAX_WIN_SIZE + MSS) < recvSeqR)) 
 		return 1;
 	return 0;
 }
 
+int isSendBufferOverfull(){
+	if ((sendWinF == sendWinR + 1) || (sendWinF == 0 && sendWinR == SIZE - 1) || ((sendWinF + MAX_WIN_SIZE+MSS) < sendWinR) || ((sendSeqF + MAX_WIN_SIZE + MSS) < sendSeqR)) 
+		return 1;
+	return 0;
+}
 
 /* add to send buffer. 
  * Make sure you call isSendBufferFull() before calling this to make sure you add only if it isnt full. 
@@ -71,7 +76,7 @@ int isRecvBufferFull(){
 int addToSendBuffer(char* body, int size){
 	int i = 0;
 	int seq = sendSeqR;
-	if (isSendBufferFull()) printf("\n\n Overflow!!!!\n\n");
+	if (isSendBufferOverfull()) printf("\n\n Overflow!!!!\n\n");
 	else{
 		if (sendWinF == -1)sendWinF = 0;
 		int index = sendWinR;
@@ -85,7 +90,7 @@ int addToSendBuffer(char* body, int size){
 		return seq;
 	}
 	perror("done!\n");
-	return 0;
+	return -1;
 }
 
 /*
@@ -124,14 +129,15 @@ void updateRecvBuffer(){
  * if its greater than seq then its a packet from the future, something went wrong
  * then update the recv window (slide it)
 */
-void addToRecvBuffer(int seq, char* body, int size){ // untested. perform a check before running this on the free space. the free space should be alteast one MSS
+int addToRecvBuffer(int seq, char* body, int size){ // untested. perform a check before running this on the free space. the free space should be alteast one MSS
 	int i = 0;
 	int index = 0;
 	if (isRecvBufferFull()) printf("\n\n Overflow!!!!\n\n");
 	else if(seq < recvSeqF) {
 		printf("already accounted for\n");
-	}else if(seq > recvSeqR){
+	}else if(seq >= recvSeqR){
 		printf("error: received packet from the future %d\n", seq);
+		return -1;
 	}
 	else{
 		int index = seq%SIZE;
@@ -146,6 +152,7 @@ void addToRecvBuffer(int seq, char* body, int size){ // untested. perform a chec
 			updateRecvBuffer();
 		}
 	}
+	return 1;
 }
 
 /*
@@ -369,7 +376,7 @@ setPacketToSentToTroll(int seq){
 int getDataToSendTroll(Packet* packet){
 	int i = 0;
 	for(i = 0; i<BOOK_SIZE; i++){
-		printf("%d\n", sendTimeOutBuffer[i]);
+		//printf("%d\n", sendTimeOutBuffer[i]);
 		if(sendTimeOutBuffer[i] !=-1){
 			printf("inside getdatatosendtroll\n");
 			sendBufferGetData(packet->body, MSS, i*MSS);
@@ -388,5 +395,9 @@ int getDataToSendTroll(Packet* packet){
 }
 void printRecvBufferParameters(){
 	printf("recvWinF = %d recvWinR = %d, recvSeqF = %d, recvSeqR = %d\n", recvWinF, recvWinR, recvSeqF, recvSeqR);
+}
+
+void printSendBufferParameters(){
+	printf("sendWinF = %d sendWinR = %d, sendSeqF = %d, sendSeqR = %d\n", sendWinF, sendWinR, sendSeqF, sendSeqR);
 }
 #endif

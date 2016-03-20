@@ -103,24 +103,29 @@ void cancelTimer(int key) {
 
 int recvTimeout(){
     if(isActive){
+        FD_ZERO(&readSockets);
+        FD_ZERO(&writeSockets);
+        FD_SET(sock,&readSockets);
+        FD_SET(sock, &writeSockets);
         int temp = select(sock+1,&readSockets,&writeSockets,NULL,&tv);
-        printf("temp = %d\n", temp);
+        //printf("temp = %d\n", temp);
         if(temp > 0) {
-            
-            printf("ITS READING!!!!\n");
-           Node *packet  = (Node*)malloc(sizeof(Node));
-            packet->key = 0;
-            packet->timeval = 0.0;
-            packet->next = NULL;
-            int rec = recv(sock, packet, sizeof(Node), 0);
-            if( rec < 0){
-                perror("error reading on stream socket: error on reading file size");
-                exit(1);
+            if(FD_ISSET(sock, &readSockets)){
+                printf("ITS READING!!!!\n");
+                Node *packet  = (Node*)malloc(sizeof(Node));
+                packet->key = 0;
+                packet->timeval = 0.0;
+                packet->next = NULL;
+                int rec = recv(sock, packet, sizeof(Node), 0);
+                if( rec < 0){
+                    perror("error reading on stream socket: error on reading file size");
+                    exit(1);
+                }
+                if(rec == 0){
+                    return -1;
+                }
+                return packet->key;
             }
-            if(rec == 0){
-                return -1;
-            }
-            return packet->key;
         }
     }
     return -1;

@@ -19,6 +19,8 @@
 #include <stdlib.h>
 #define MSS 1000
 
+char emptyBody[MSS];
+
 typedef struct tcp
 {
   uint16_t src_port;
@@ -53,6 +55,9 @@ struct sockaddr_in server_add;
   Initializing port values which we get while running server and client 
   programs.
 */
+void createEmptyBody(){
+  memset(emptyBody, '0', MSS);
+}
 int choose_port(int port1, int port2){
 	global_port_send = port1;
 	global_port_recv = port2;
@@ -96,6 +101,7 @@ int SEND(int sock, const void *buf, size_t len, int flags){
       perror("Error sending datagram message");
       exit(1);
   }
+  printf("recved conformation\n");
 }
 
 /* 

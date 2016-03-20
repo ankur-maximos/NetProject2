@@ -220,7 +220,7 @@ int main(int argc,const char *argv[]) {
   		FD_SET(msgsock,&readSockets);
   		FD_SET(msgsock, &writeSockets);
   		gettimeofday(&t1,NULL);
-  		int temp = select(msgsock+1,&readSockets,&writeSockets,NULL,tv);
+  		int temp = select(msgsock+1,&readSockets,NULL,NULL,tv);
   		gettimeofday(&t2,NULL);
   		if(temp == -1) {
   			perror("select");
@@ -237,8 +237,9 @@ int main(int argc,const char *argv[]) {
   			if(!head) {
   				printf("Timer list is empty...\n");
   			}
-  		} else {
+  		} else if(FD_ISSET(msgsock, &readSockets)){
   			//new request came
+
   			Node* node = (Node*)malloc(sizeof(Node));
   			int rec = recv(msgsock, node, sizeof(Node), MSG_WAITALL);
   			if(rec < 0){
@@ -278,7 +279,7 @@ int main(int argc,const char *argv[]) {
   			newN->key = head->key;
 			newN->time_val = 0.0;
 			newN->next = NULL;
-		    printf("sending packet\n");
+		    printf("SENDING PACKET\n");
   			int w = write(msgsock, newN, sizeof(Node));
   			printf("%d\n", w);
         	deleteNode(&head,head->key);
