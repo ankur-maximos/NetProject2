@@ -176,7 +176,7 @@ main(int argc, char const *argv[])
 				memcpy(port1,packet.body,1000);
 				if(strlen(port1) > 4)
 					break;
-				memcpy(port, packet.body, 1000);
+				memcpy(port, port1, 1000);
 				//Setting port number in struct
 				server_addr.sin_family = AF_INET;
 				server_addr.sin_addr.s_addr = inet_addr("127.0.0.1");	
