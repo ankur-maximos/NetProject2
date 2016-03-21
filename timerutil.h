@@ -84,6 +84,7 @@ void init(){
 void startTimer(double timeval, int key) {
 
     Node *packet  = (Node*)malloc(sizeof(Node));
+    printf("TIMER STARTED FOR: %d\n", key);
     packet->key = key;
     struct timeval tvVal;
     gettimeofday(&tvVal, NULL);
@@ -109,10 +110,11 @@ void cancelTimer(int key) {
         exit(1);
     }
     struct timeval tvVal;
+    
+    usleep(100000);
     gettimeofday(&tvVal, NULL);
     EndTimerVal[key/MSS] = tvVal.tv_sec * 1000000.0 + tvVal.tv_usec;
     calculateRTT(StartTimerVal[key/MSS], EndTimerVal[key/MSS]);
-    usleep(100000);
 } 
 
 int recvTimeout(){
@@ -200,7 +202,7 @@ float calculateRTO() {
     RTTVAR = RTTVAR + h * (abs(DEV) - RTTVAR);
     RTO = SRTT + 4 * RTTVAR;
     if(RTO < 1.0f){
-        RTO = 1.0f;
+        //RTO = 2.0f;
     }
     printf("Updated values RTO: %.1f -- SRTT:%.1f -- RTTVAR: %.1f \n",RTO,SRTT,RTTVAR);
     return RTO;

@@ -63,7 +63,7 @@ main(int argc, char const *argv[])
     	exit(1);
     }
     printf("Socket initialized \n");
-    tv.tv_sec = 1;
+    tv.tv_sec = 0;
     tv.tv_usec = 500000;
     //Copying socket to send to troll
     troll_sock = sock;
@@ -111,6 +111,7 @@ main(int argc, char const *argv[])
 	int len = sizeof(recvfrom_addr);
 	//Always keep on listening and sending
 	while(1) {
+		//usleep(200000);
 		FD_ZERO(&readSoc);
 	    FD_ZERO(&writeSoc);
 	    FD_SET(sock,&readSoc);
@@ -148,32 +149,20 @@ main(int argc, char const *argv[])
 					previousPacketProcessed = 1;
 					printf("Received from ftpc, packet no--> %d\n",seq);
 					//now that data is in buffer send message back to client
-					floodGatesOpen = 1;
-					s = sendto(sock, &packet, sizeof(packet), 0, (struct sockaddr *)&recvfrom_addr, sizeof(recvfrom_addr));
-				        if (s < 0)
-				        {
-				            perror("Error sending datagram");
-				            exit(1);
-				        } 
+					if(!isSendBufferFull()){
+						floodGatesOpen = 1;
+						s = sendto(sock, &packet, sizeof(packet), 0, (struct sockaddr *)&recvfrom_addr, sizeof(recvfrom_addr));
+					        if (s < 0)
+					        {
+					            perror("Error sending datagram");
+					            exit(1);
+					        } 
+				    }else{
+				    	floodGatesOpen = 0;
+				    }
 				
 				}
-				else{
-					floodGatesOpen = 0;
-					ftpc_address = recvfrom_addr;
-					int seq;
-					seq = addToSendBuffer(packet.body, MSS);
-					//printf("IT OVERFLOWS HERE. THIS IS NOT GOOD\n");
-					//setPacketToSentToTroll(seq);
-					if(seq!=-1){
-						sendTimeOutBuffer[(seq/MSS)%BOOK_SIZE] = seq;
-						justSettingDataToTroll = 1;
-						previousPacketProcessed = 1;
-						//printf("Buffer is full but i am still adding packet no--> %d\n",seq);
-						savePacket = packet;
-						previousPacketProcessed = 1;
-						isThereASavedPacket = 1;
-					}
-				}
+				
 				//send to troll part
 				
  				count++;
@@ -181,6 +170,8 @@ main(int argc, char const *argv[])
 			case 2:
 				//ftps send a message
 				memcpy(port,packet.body,1000);
+				if(strlen(port) > 4)
+					break;
 
 				//Setting port number in struct
 				server_addr.sin_family = AF_INET;
@@ -209,6 +200,7 @@ main(int argc, char const *argv[])
 					if(!isRecvBufferFull()){
 						//printf("packet added to buffer\n");
 						int status = addToRecvBuffer(packet.tcpHeader.seq, packet.body, MSS);
+						
 						printRecvBufferParameters();
 
 						if(status!=-1){
@@ -226,6 +218,7 @@ main(int argc, char const *argv[])
 						    tcpdc_address.sin_port = htons(atoi(argv[3]));
 						    tcpdc_address.sin_addr.s_addr = inet_addr(argv[4]);
 						    packet.header = tcpdc_address;
+						    packet.tcpHeader.checksum = gen_crc(packet.body, MSS);
 						    //printf("ack send to tcpdc on port %d\n",ntohs(packet.header.sin_port));
 						    printf("sending ack of seq no -> %d\n", packet.tcpHeader.seq);
 						    packet.tcpHeader.ack = 1;
@@ -254,22 +247,26 @@ main(int argc, char const *argv[])
 				//received ack from troll 
 				//this function call will adjust the window, and close timers
 				//printf("ack received but checking if truely ack\n");
-				if(packet.tcpHeader.ack == 1){
-					acceptAck(packet.tcpHeader.seq);
-					printf("acccepted ack -> %d\n",packet.tcpHeader.seq);
-					previousPacketProcessed = 1;
-					if(!floodGatesOpen && !isSendBufferFull()){
-						floodGatesOpen = 1;
-						packet = savePacket;
-						//now that data is in buffer send message back to client
-						s = sendto(sock, &packet, sizeof(packet), 0, (struct sockaddr *)&ftpc_address, sizeof(recvfrom_addr));
-					        if (s < 0)
-					        {
-					            perror("Error sending datagram");
-					            exit(1);
-					        } 
-					
+				if(test_crc(packet.body, MSS, packet.tcpHeader.checksum)){
+					if(packet.tcpHeader.ack == 1){
+						acceptAck(packet.tcpHeader.seq);
+						printf("acccepted ack -> %d\n",packet.tcpHeader.seq);
+						previousPacketProcessed = 1;
+						if(!floodGatesOpen && !isSendBufferFull()){
+							floodGatesOpen = 1;
+							packet = savePacket;
+							//now that data is in buffer send message back to client
+							s = sendto(sock, &packet, sizeof(packet), 0, (struct sockaddr *)&ftpc_address, sizeof(recvfrom_addr));
+						        if (s < 0)
+						        {
+						            perror("Error sending datagram");
+						            exit(1);
+						        } 
+						
+						}
 					}
+				}else{
+					previousPacketProcessed = 1;
 				}
 				break;
 			}
@@ -288,7 +285,8 @@ main(int argc, char const *argv[])
 			}
 			
 			//send to ftps
-			if(!isDataToSendFtpsEmpty()){
+			while(!isDataToSendFtpsEmpty()){
+				//usleep(100000);
 				char savePacketType;
 				if(!previousPacketProcessed){
 					savePacketType = packet.packetType;
@@ -297,9 +295,12 @@ main(int argc, char const *argv[])
 				server_addr.sin_addr.s_addr = inet_addr("127.0.0.1");	
 				server_addr.sin_port = htons(atoi(port));
 				if(getDataToSendFtps(&packet)){
+					//printf("%s\n", packet.body);
+					
 					packet.packetType = (char)5;
 					packet.tcpHeader.ack = 0;
 					printf("sending packet to FTPS %d\n", atoi(port));
+					packet.tcpHeader.checksum = gen_crc(packet.body, MSS);
 					s = sendto(server_sock, &packet, sizeof(packet), 0, (struct sockaddr *)&server_addr, sizeof(server_addr));
 					if (s < 0)
 			        {
@@ -314,6 +315,7 @@ main(int argc, char const *argv[])
 			//displayBook1();
 			//displayBook2();
 			while(!isDataToSendTrollEmpty()){ // this function
+				//usleep(100000);
 				char savePacketType;
 				if(!previousPacketProcessed){
 					savePacketType = packet.packetType;

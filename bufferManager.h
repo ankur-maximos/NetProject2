@@ -58,7 +58,7 @@ int isSendBufferFull(){
 
 //check if recv buffer is full or not. the recv buffer is indicated as full if the recv window if full.
 int isRecvBufferFull(){
-	if ((recvWinF == recvWinR + 1) || (recvWinF == 0 && recvWinR == SIZE - 1) || ((recvWinF + MAX_WIN_SIZE) < recvWinR) || ((recvSeqF + MAX_WIN_SIZE + MSS) < recvSeqR)) 
+	if ((recvWinF == recvWinR + 1) || (recvWinF == 0 && recvWinR == SIZE - 1) || ((recvWinF + MAX_WIN_SIZE +MSS) < recvWinR) || ((recvSeqF + MAX_WIN_SIZE + MSS) < recvSeqR)) 
 		return 1;
 	return 0;
 }
@@ -109,9 +109,9 @@ void updateRecvBuffer(){
 		while(recvBook[index/MSS] == 1){
 			index = (index + MSS) % SIZE;
 			count+=MSS;
-			//printf("count = %d\n", count);
+			printf("count = %d\n", count);
 		}
-		//printf("cout = %d\n", count);
+		printf("cout = %d\n", count);
 		if(count%MSS == 0){
 			//window has moved by count/MSS blocks
 			recvSeqF = recvSeqF + count;
@@ -135,8 +135,9 @@ int addToRecvBuffer(int seq, char* body, int size){ // untested. perform a check
 	if (isRecvBufferFull()) printf("\n\n Overflow!!!!\n\n");
 	else if(seq < recvSeqF) {
 		printf("already accounted for\n");
-	}else if(seq >= recvSeqR){
+	}else if(seq > recvSeqR){
 		printf("error: received packet from the future %d\n", seq);
+		exit(1);
 		return -1;
 	}
 	else{
@@ -145,10 +146,12 @@ int addToRecvBuffer(int seq, char* body, int size){ // untested. perform a check
 			recvBook[index/MSS] = 1;
 			if (recvWinF == -1)recvWinF = 0;
 			while (i < size){
+
 				RecvBuffer[index] = *(body+i);
 				index = (index + 1) % SIZE;
 				i++;
 			}
+
 			updateRecvBuffer();
 		}
 	}
@@ -188,7 +191,8 @@ void acceptAck(int seq){
 	if (isSendBufferFull()) printf("\n\n Overflow!!!!\n\n");
 	if(seq < sendSeqF) {
 		printf("already accounted for\n");
-	}else if(seq > sendSeqR){
+		cancelTimer(seq);
+	}else if(seq >= sendSeqR){
 		printf("error: received ack packet from the future %d\n", seq);
 	}
 	else{
@@ -198,7 +202,7 @@ void acceptAck(int seq){
 			sendBook[index/MSS] = 0;
 			if (sendWinF == -1)sendWinF = 0;
 			while (i < MSS){
-				SendBuffer[index] = '\0';
+				//SendBuffer[index] = '\0';
 				index = (index + 1) % SIZE;
 				i++;
 			}
@@ -380,6 +384,7 @@ int getDataToSendTroll(Packet* packet){
 		if(sendTimeOutBuffer[i] !=-1){
 			//printf("inside getdatatosendtroll\n");
 			sendBufferGetData(packet->body, MSS, i*MSS);
+			
 			packet->tcpHeader.seq = sendTimeOutBuffer[i];
 			sendTimeOutBuffer[i] = -1;
 			packet->packetType = 3;

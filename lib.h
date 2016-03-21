@@ -17,6 +17,7 @@
 #include <string.h>
 #include <strings.h>
 #include <stdlib.h>
+#include "crc.h"
 #define MSS 1000
 
 char emptyBody[MSS];
@@ -121,6 +122,9 @@ int RECV(int s, void *buf, size_t len, int flags){
 	if(recvfrom(s, &fromTcpd, sizeof(fromTcpd), flags,(struct sockaddr *)&my_addr, &fromlen) < 0) {
       perror("Error sending datagram message");
       exit(1);
+  }
+  if(!test_crc(fromTcpd.body, MSS, fromTcpd.tcpHeader.checksum)){
+    printf("checksum failed something wrong with packet\n");
   }
   int i;
   memcpy(buf, fromTcpd.body, len);
