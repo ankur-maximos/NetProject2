@@ -91,6 +91,7 @@ int SEND(int sock, const void *buf, size_t len, int flags){
   toTcpd.packetType = (char)packetType;
   toTcpd.header = server_add;
   toTcpd.tcpHeader = tcpHeader; // empty tcpHeader
+  toTcpd.tcpHeader.checksum = 0;
   memcpy(toTcpd.body, body, len);
   
 	if(sendto(sock, &toTcpd, sizeof(toTcpd), flags, (struct sockaddr *)&tcpd, sizeof(tcpd)) < 0) {

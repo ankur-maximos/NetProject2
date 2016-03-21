@@ -131,6 +131,9 @@ main(int argc, char const *argv[])
 		switch((int)packet.packetType){
 			case 1:
 				//ftpc send us a message 
+				if(packet.tcpHeader.checksum != 0){
+					break;
+				}
 				if(firstTimeEver){
 					tcpds_address = packet.header;
 					firstTimeEver = 0;
