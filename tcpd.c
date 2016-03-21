@@ -172,8 +172,9 @@ main(int argc, char const *argv[])
 				break;
 			case 2:
 				//ftps send a message
-				memcpy(port,packet.body,1000);
-				if(strlen(port) > 4)
+				char port1[4];
+				memcpy(port1,packet.body,1000);
+				if(strlen(port1) > 4)
 					break;
 
 				//Setting port number in struct
