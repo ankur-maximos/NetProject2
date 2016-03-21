@@ -126,7 +126,7 @@ main(int argc, char const *argv[])
 				exit(1);
 			}
 			//printf("recv packet of type:%d\n", packet.packetType);
-		 
+		 char port1[4];
 
 		switch((int)packet.packetType){
 			case 1:
@@ -172,7 +172,7 @@ main(int argc, char const *argv[])
 				break;
 			case 2:
 				//ftps send a message
-				char port1[4];
+				
 				memcpy(port1,packet.body,1000);
 				if(strlen(port1) > 4)
 					break;
