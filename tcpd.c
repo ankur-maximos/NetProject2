@@ -329,6 +329,7 @@ main(int argc, char const *argv[])
 					crc = gen_crc(packet.body, MSS);
 					packet.tcpHeader.checksum = crc;
 				    packet.header = tcpds_address;
+				    printf("tcpds port %d\n", ntohs(tcpds_address.sin_port));
 					printf("sending data seq -> %d\n", packet.tcpHeader.seq);
 					startTimer(TIMER, packet.tcpHeader.seq);
 					packet.packetType = (char)3;
