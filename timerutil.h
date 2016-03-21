@@ -15,7 +15,9 @@
 #define PORT 3090
 float SRTT, RTTVAR;                                                             //Smoothed RTT and RTT variance
 float g = .125, h = .25;                                                        //G and H for RTO
-double RTT = 3;                                                                 //Initial RTT
+double RTT = 10;                                                                 //Initial RTT
+double StartTimerVal[10000];
+double EndTimerVal[10000];
 int isActive = 0;
 int timer_port = PORT;
 int sock;
@@ -32,7 +34,12 @@ struct node {
 
 typedef struct node Node;
 
+float calculateRTO();
+void calculateRTT(double, double);
+void initSRTT(float);
+
 void init(){
+    initSRTT(RTT);
     isActive = 1;
     if((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0){
         perror("error opening tcp socket");
@@ -78,7 +85,10 @@ void startTimer(double timeval, int key) {
 
     Node *packet  = (Node*)malloc(sizeof(Node));
     packet->key = key;
-    packet->timeval = timeval;
+    struct timeval tvVal;
+    gettimeofday(&tvVal, NULL);
+    StartTimerVal[key/MSS] = tvVal.tv_sec * 1000000.0 + tvVal.tv_usec;
+    packet->timeval = calculateRTO();
     packet->next = NULL;
 
     if(write(sock, packet, sizeof(Node)) < 0) {
@@ -98,6 +108,10 @@ void cancelTimer(int key) {
         perror("error writing on stream socket: error on sending packet");
         exit(1);
     }
+    struct timeval tvVal;
+    gettimeofday(&tvVal, NULL);
+    EndTimerVal[key/MSS] = tvVal.tv_sec * 1000000.0 + tvVal.tv_usec;
+    calculateRTT(StartTimerVal[key/MSS], EndTimerVal[key/MSS]);
     usleep(100000);
 } 
 
@@ -174,7 +188,7 @@ void sendDataToServer(int seq) {
 */
 
 //Calculate RTO using Jacobson's Algorithm
-int calculateRTO() {
+float calculateRTO() {
     float DEV, RTO;
 
     if(RTT == -1.0) {
@@ -185,16 +199,19 @@ int calculateRTO() {
     SRTT = SRTT + g * DEV;
     RTTVAR = RTTVAR + h * (abs(DEV) - RTTVAR);
     RTO = SRTT + 4 * RTTVAR;
-    
+    if(RTO < 1.0f){
+        RTO = 1.0f;
+    }
     printf("Updated values RTO: %.1f -- SRTT:%.1f -- RTTVAR: %.1f \n",RTO,SRTT,RTTVAR);
-    return (int)RTO;
+    return RTO;
 }
 
 //Calculate RTT
-void calculateRTT(struct timeval packet_time, struct timeval ack_time){
-    double ackMill = ((ack_time.tv_sec) * 1000) + ((ack_time.tv_usec) / 1000) ;
-    double packMill = ((packet_time.tv_sec) * 1000) + ((packet_time.tv_usec) / 1000) ;
+void calculateRTT(double packMill, double ackMill){
+    //double ackMill = ((ack_time.tv_sec) * 1000) + ((ack_time.tv_usec) / 1000) ;
+    //double packMill = ((packet_time.tv_sec) * 1000) + ((packet_time.tv_usec) / 1000) ;
     RTT = (ackMill - packMill);
+    RTT = RTT/1000000.0;
     if(RTT<0 || RTT>30){
         RTT = 30;
     }

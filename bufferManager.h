@@ -109,9 +109,9 @@ void updateRecvBuffer(){
 		while(recvBook[index/MSS] == 1){
 			index = (index + MSS) % SIZE;
 			count+=MSS;
-			printf("count = %d\n", count);
+			//printf("count = %d\n", count);
 		}
-		printf("cout = %d\n", count);
+		//printf("cout = %d\n", count);
 		if(count%MSS == 0){
 			//window has moved by count/MSS blocks
 			recvSeqF = recvSeqF + count;
@@ -378,7 +378,7 @@ int getDataToSendTroll(Packet* packet){
 	for(i = 0; i<BOOK_SIZE; i++){
 		//printf("%d\n", sendTimeOutBuffer[i]);
 		if(sendTimeOutBuffer[i] !=-1){
-			printf("inside getdatatosendtroll\n");
+			//printf("inside getdatatosendtroll\n");
 			sendBufferGetData(packet->body, MSS, i*MSS);
 			packet->tcpHeader.seq = sendTimeOutBuffer[i];
 			sendTimeOutBuffer[i] = -1;

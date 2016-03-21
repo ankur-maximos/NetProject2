@@ -117,14 +117,14 @@ main(int argc, char const *argv[])
 	    FD_SET(sock, &writeSoc);
 	    int temp = select(sock+1,&readSoc,NULL,NULL,&tv);
 		if(temp > 0 && FD_ISSET(sock, &readSoc)){
-			printf("waiting here\n");
+			//printf("waiting here\n");
 			previousPacketProcessed = 0;
 			int rec = recvfrom(sock, &packet, sizeof(packet), 0, (struct sockaddr *)&recvfrom_addr, &len);
 			if(rec<0){
 				perror("Error receiving datagram");
 				exit(1);
 			}
-			printf("recv packet of type:%d\n", packet.packetType);
+			//printf("recv packet of type:%d\n", packet.packetType);
 		 
 
 		switch((int)packet.packetType){
@@ -162,13 +162,13 @@ main(int argc, char const *argv[])
 					ftpc_address = recvfrom_addr;
 					int seq;
 					seq = addToSendBuffer(packet.body, MSS);
-					printf("IT OVERFLOWS HERE. THIS IS NOT GOOD\n");
+					//printf("IT OVERFLOWS HERE. THIS IS NOT GOOD\n");
 					//setPacketToSentToTroll(seq);
 					if(seq!=-1){
 						sendTimeOutBuffer[(seq/MSS)%BOOK_SIZE] = seq;
 						justSettingDataToTroll = 1;
 						previousPacketProcessed = 1;
-						printf("Buffer is full but i am still adding packet no--> %d\n",seq);
+						//printf("Buffer is full but i am still adding packet no--> %d\n",seq);
 						savePacket = packet;
 						previousPacketProcessed = 1;
 						isThereASavedPacket = 1;
@@ -207,18 +207,18 @@ main(int argc, char const *argv[])
 				if(test_crc(packet.body, MSS, packet.tcpHeader.checksum)){
 					printf("packet (%d) verification --> Successful\n",packet.tcpHeader.seq);
 					if(!isRecvBufferFull()){
-						printf("packet added to buffer\n");
+						//printf("packet added to buffer\n");
 						int status = addToRecvBuffer(packet.tcpHeader.seq, packet.body, MSS);
 						printRecvBufferParameters();
 
 						if(status!=-1){
 							//send ack to tcpdc
 							//send the same packet back as ack
-							printf("creating and sending ack packet\n");
+							//printf("creating and sending ack packet\n");
 							packet.packetType = (char)4;
 							memset(packet.body, '0', MSS);
 							troll.sin_family = AF_INET;
-							printf("port no: %d\n", atoi(argv[2]));
+							//printf("port no: %d\n", atoi(argv[2]));
 						  	troll.sin_port = htons(atoi(argv[2]));
 						  	troll.sin_addr.s_addr = inet_addr("127.0.0.1");
 						  	packet.tcpHeader.ack = 1;
@@ -226,8 +226,8 @@ main(int argc, char const *argv[])
 						    tcpdc_address.sin_port = htons(atoi(argv[3]));
 						    tcpdc_address.sin_addr.s_addr = inet_addr(argv[4]);
 						    packet.header = tcpdc_address;
-						    printf("ack send to tcpdc on port %d\n",ntohs(packet.header.sin_port));
-						    printf("sending ack of seq no: %d\n", packet.tcpHeader.seq);
+						    //printf("ack send to tcpdc on port %d\n",ntohs(packet.header.sin_port));
+						    printf("sending ack of seq no -> %d\n", packet.tcpHeader.seq);
 						    packet.tcpHeader.ack = 1;
 						    packet.packetType = (char)4;
 							s = sendto(troll_sock, &packet, sizeof(packet), 0, (struct sockaddr *)&troll, sizeof(troll));
@@ -253,7 +253,7 @@ main(int argc, char const *argv[])
 			case 4:
 				//received ack from troll 
 				//this function call will adjust the window, and close timers
-				printf("ack received but checking if truely ack\n");
+				//printf("ack received but checking if truely ack\n");
 				if(packet.tcpHeader.ack == 1){
 					acceptAck(packet.tcpHeader.seq);
 					printf("acccepted ack -> %d\n",packet.tcpHeader.seq);
@@ -318,13 +318,13 @@ main(int argc, char const *argv[])
 				if(!previousPacketProcessed){
 					savePacketType = packet.packetType;
 				}
-				printf("entering send to server\n");
+				//printf("entering send to server\n");
 				if(getDataToSendTroll(&packet)){
 
 					crc = gen_crc(packet.body, MSS);
 					packet.tcpHeader.checksum = crc;
 				    packet.header = tcpds_address;
-					printf("sending data seq = %d\n", packet.tcpHeader.seq);
+					printf("sending data seq -> %d\n", packet.tcpHeader.seq);
 					startTimer(TIMER, packet.tcpHeader.seq);
 					packet.packetType = (char)3;
 					troll.sin_family = AF_INET;
